@@ -1,7 +1,7 @@
 """Product repository for batch operations and database access."""
 from __future__ import annotations
 
-from typing import Sequence
+from typing import Sequence, Any
 
 from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert
@@ -40,16 +40,25 @@ class ProductRepository:
         if not products:
             return 0
 
-        # Prepare product data as dictionaries
-        product_dicts = [
-            {
-                "sku": p.sku,
-                "name": p.name,
-                "description": p.description,
-                "active": p.active,
+        # Deduplicate products by case-insensitive SKU within the batch
+        # Keep the last occurrence of each SKU (latest data wins)
+        # Build dicts directly to avoid second iteration
+        seen_skus: dict[str, dict[str, Any]] = {}
+        for product in products:
+            # Normalize SKU to lowercase for deduplication
+            # Skip if SKU is empty (shouldn't happen, but safety check)
+            if not product.sku or not product.sku.strip():
+                continue
+            sku_key = product.sku.strip().lower()
+            seen_skus[sku_key] = {
+                "sku": product.sku.strip(),  # Also strip the stored SKU
+                "name": product.name,
+                "description": product.description,
+                "active": product.active,
             }
-            for p in products
-        ]
+        
+        # Use deduplicated product dicts directly
+        product_dicts = list(seen_skus.values())
 
         # Build PostgreSQL INSERT ... ON CONFLICT statement
         stmt = insert(Product).values(product_dicts)

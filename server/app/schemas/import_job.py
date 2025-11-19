@@ -63,9 +63,6 @@ class ImportProgress(BaseModel):
     error_message: str | None = None
     updated_at: datetime | None = None
 
-    class Config:
-        """Allow flexible construction from dicts or ORM objects."""
-
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 

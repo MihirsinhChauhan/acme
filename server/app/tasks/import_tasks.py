@@ -9,7 +9,7 @@ import csv
 import logging
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 from uuid import UUID
 
 from redis import Redis
@@ -354,6 +354,7 @@ def process_csv_import(self, job_id: str, file_path: str) -> dict:
 
     except Retry:
         # This is a Celery retry - re-raise to let Celery handle it
+        # Don't delete the file yet - it will be needed for retry
         raise
 
     except Exception as e:
@@ -365,26 +366,29 @@ def process_csv_import(self, job_id: str, file_path: str) -> dict:
 
         # Update job status to FAILED
         error_message = f"{type(e).__name__}: {str(e)}"
-        _update_job_failed(job_id, error_message)
+        
+        # Only update to FAILED if this is the final retry attempt
+        if self.request.retries >= self.max_retries:
+            _update_job_failed(job_id, error_message)
+            
+            # Only delete file on final failure
+            try:
+                if file_path_obj.exists():
+                    file_path_obj.unlink()
+                    logger.info(f"Job {job_id}: Cleaned up temporary file after final failure")
+            except Exception as cleanup_err:
+                logger.warning(f"Job {job_id}: Failed to delete temp file on error: {cleanup_err}")
 
         # Update Redis progress
         try:
             tracker.update(
-                status="failed",
+                status="failed" if self.request.retries >= self.max_retries else "importing",
                 processed_rows=processed_rows if 'processed_rows' in locals() else 0,
                 error_message=error_message,
                 force=True,
             )
         except Exception as redis_err:
             logger.warning(f"Job {job_id}: Failed to update Redis on error: {redis_err}")
-
-        # Clean up temp file even on failure
-        try:
-            if file_path_obj.exists():
-                file_path_obj.unlink()
-                logger.info(f"Job {job_id}: Cleaned up temporary file after failure")
-        except Exception as cleanup_err:
-            logger.warning(f"Job {job_id}: Failed to delete temp file on error: {cleanup_err}")
 
         # Close Redis connection
         try:

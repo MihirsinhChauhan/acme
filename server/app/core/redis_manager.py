@@ -8,19 +8,41 @@ from uuid import UUID
 
 from redis.asyncio import Redis, from_url
 
+from app.core.config import get_settings
+
 DEFAULT_PROGRESS_TTL_SECONDS = 60 * 60  # keep hashes for 1 hour after completion
 DEFAULT_NAMESPACE = "import_progress"
 
 
 def create_redis_client(url: str, *, decode_responses: bool = False) -> Redis:
     """Return a configured Redis asyncio client instance."""
+    
+    kwargs = {
+        "decode_responses": decode_responses,
+        "health_check_interval": 30,
+    }
+    
+    # Only include encoding parameter when decode_responses is True
+    if decode_responses:
+        kwargs["encoding"] = "utf-8"
+    
+    return from_url(url, **kwargs)
 
-    return from_url(
-        url,
-        encoding="utf-8" if decode_responses else None,
-        decode_responses=decode_responses,
-        health_check_interval=30,
-    )
+
+def get_redis_client(*, decode_responses: bool = False) -> Redis:
+    """Return a Redis client configured from application settings.
+    
+    Convenience function that uses the Redis URL from settings to create
+    a client instance. Useful for health checks and other non-dependency contexts.
+    
+    Args:
+        decode_responses: Whether to decode responses as strings (default: False)
+        
+    Returns:
+        Configured Redis asyncio client instance
+    """
+    settings = get_settings()
+    return create_redis_client(settings.redis_url, decode_responses=decode_responses)
 
 
 class ProgressManager:

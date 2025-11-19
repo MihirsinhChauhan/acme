@@ -35,7 +35,7 @@ class ImportJob(Base):
     )
     filename: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[ImportStatus] = mapped_column(
-        PgEnum(ImportStatus, name="import_job_status"),
+        PgEnum(ImportStatus, name="import_job_status", values_callable=lambda x: [e.value for e in x]),
         nullable=False,
         default=ImportStatus.QUEUED,
         server_default=ImportStatus.QUEUED.value,

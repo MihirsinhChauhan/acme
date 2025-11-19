@@ -2,11 +2,16 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api import health, progress, upload
 from app.core.config import get_settings
 
 settings = get_settings()
 
-app = FastAPI(title=settings.app_name, version="0.1.0")
+app = FastAPI(
+    title=settings.app_name,
+    version="0.1.0",
+    description="CSV Import Platform with background processing via RabbitMQ and Celery",
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -16,9 +21,7 @@ app.add_middleware(
     allow_credentials=True,
 )
 
-
-@app.get("/health", tags=["health"])
-async def health() -> dict[str, str]:
-    """Simple health endpoint to be used by load balancers."""
-
-    return {"status": "ok"}
+# Register API routers
+app.include_router(health.router)  # Health checks at root level
+app.include_router(upload.router, prefix=settings.api_prefix)
+app.include_router(progress.router, prefix=settings.api_prefix)
