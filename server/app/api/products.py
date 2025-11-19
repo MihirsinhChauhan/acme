@@ -19,6 +19,7 @@ from app.schemas.product import (
 )
 from app.services.import_service import ImportService
 from app.services.product_repository import ProductRepository
+from app.services.webhook_service import WebhookService
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -93,6 +94,7 @@ async def list_products(
 )
 async def create_product(
     product: ProductCreate,
+    session: Session = Depends(get_session),
     repository: ProductRepository = Depends(get_product_repository),
 ) -> ProductResponse:
     """
@@ -110,6 +112,16 @@ async def create_product(
     """
     try:
         created_product = repository.create(product)
+        
+        # Publish webhook event
+        try:
+            webhook_service = WebhookService(session)
+            product_dict = ProductResponse.model_validate(created_product).model_dump()
+            webhook_service.publish_event("product.created", product_dict)
+        except Exception as webhook_err:
+            logger.warning(f"Failed to publish webhook event for product.created: {webhook_err}")
+            # Don't fail the request if webhook fails
+        
         return ProductResponse.model_validate(created_product)
     except Exception as e:
         # Check if it's a unique constraint violation
@@ -173,6 +185,7 @@ async def get_product(
 async def update_product(
     product_id: int,
     product: ProductUpdate,
+    session: Session = Depends(get_session),
     repository: ProductRepository = Depends(get_product_repository),
 ) -> ProductResponse:
     """
@@ -196,6 +209,16 @@ async def update_product(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Product with ID {product_id} not found",
             )
+        
+        # Publish webhook event
+        try:
+            webhook_service = WebhookService(session)
+            product_dict = ProductResponse.model_validate(updated_product).model_dump()
+            webhook_service.publish_event("product.updated", product_dict)
+        except Exception as webhook_err:
+            logger.warning(f"Failed to publish webhook event for product.updated: {webhook_err}")
+            # Don't fail the request if webhook fails
+        
         return ProductResponse.model_validate(updated_product)
     except HTTPException:
         raise
@@ -223,6 +246,7 @@ async def update_product(
 )
 async def delete_product(
     product_id: int,
+    session: Session = Depends(get_session),
     repository: ProductRepository = Depends(get_product_repository),
 ) -> None:
     """
@@ -235,12 +259,29 @@ async def delete_product(
     Raises:
         HTTPException: 404 if product not found
     """
+    # Get product before deletion for webhook payload
+    product = repository.get_by_id(product_id)
+    if product is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Product with ID {product_id} not found",
+        )
+    
     deleted = repository.delete(product_id)
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Product with ID {product_id} not found",
         )
+    
+    # Publish webhook event
+    try:
+        webhook_service = WebhookService(session)
+        product_dict = ProductResponse.model_validate(product).model_dump()
+        webhook_service.publish_event("product.deleted", product_dict)
+    except Exception as webhook_err:
+        logger.warning(f"Failed to publish webhook event for product.deleted: {webhook_err}")
+        # Don't fail the request if webhook fails
 
 
 @router.post(
@@ -292,6 +333,10 @@ async def bulk_delete_all_products(
 
         # Step 3: Return response with job_id and SSE URL
         sse_url = f"{settings.api_prefix}/progress/{job_response.id}"
+        
+        # Note: Webhook event for bulk delete will be published when the task completes
+        # (handled in bulk_delete_tasks.py)
+        
         return BulkDeleteResponse(
             job_id=str(job_response.id),
             sse_url=sse_url,

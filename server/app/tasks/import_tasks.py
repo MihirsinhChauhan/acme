@@ -337,6 +337,21 @@ def process_csv_import(self, job_id: str, file_path: str) -> dict:
         
         logger.info(f"Job {job_id}: Import completed successfully ({processed_rows} rows processed)")
 
+        # Publish webhook event for import completion
+        try:
+            with session_scope() as session:
+                from app.services.webhook_service import WebhookService
+                webhook_service = WebhookService(session)
+                payload = {
+                    "job_id": job_id,
+                    "status": "done",
+                    "processed_rows": processed_rows,
+                    "total_rows": total_rows,
+                }
+                webhook_service.publish_event("import.completed", payload)
+        except Exception as webhook_err:
+            logger.warning(f"Failed to publish webhook event for import.completed: {webhook_err}")
+
         # Clean up temporary file
         try:
             file_path_obj.unlink()
@@ -372,6 +387,21 @@ def process_csv_import(self, job_id: str, file_path: str) -> dict:
         # Only update to FAILED if this is the final retry attempt
         if self.request.retries >= self.max_retries:
             _update_job_failed(job_id, error_message)
+            
+            # Publish webhook event for import failure
+            try:
+                with session_scope() as session:
+                    from app.services.webhook_service import WebhookService
+                    webhook_service = WebhookService(session)
+                    payload = {
+                        "job_id": job_id,
+                        "status": "failed",
+                        "error_message": error_message,
+                        "processed_rows": processed_rows if 'processed_rows' in locals() else 0,
+                    }
+                    webhook_service.publish_event("import.failed", payload)
+            except Exception as webhook_err:
+                logger.warning(f"Failed to publish webhook event for import.failed: {webhook_err}")
             
             # Only delete file on final failure
             try:

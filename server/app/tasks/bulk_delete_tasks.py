@@ -219,6 +219,22 @@ def bulk_delete_all_products_task(self, job_id: str) -> dict:
             )
             
             logger.info(f"Job {job_id}: No products to delete, job completed")
+            
+            # Publish webhook event for bulk delete completion (no products case)
+            try:
+                with session_scope() as session:
+                    from app.services.webhook_service import WebhookService
+                    webhook_service = WebhookService(session)
+                    payload = {
+                        "job_id": job_id,
+                        "status": "done",
+                        "deleted_count": 0,
+                        "total_products": 0,
+                    }
+                    webhook_service.publish_event("product.bulk_deleted", payload)
+            except Exception as webhook_err:
+                logger.warning(f"Failed to publish webhook event for product.bulk_deleted: {webhook_err}")
+            
             redis_client.close()
             
             return {
@@ -301,6 +317,21 @@ def bulk_delete_all_products_task(self, job_id: str) -> dict:
         )
         
         logger.info(f"Job {job_id}: Bulk delete completed successfully ({deleted_count} products deleted)")
+
+        # Publish webhook event for bulk delete completion
+        try:
+            with session_scope() as session:
+                from app.services.webhook_service import WebhookService
+                webhook_service = WebhookService(session)
+                payload = {
+                    "job_id": job_id,
+                    "status": "done",
+                    "deleted_count": deleted_count,
+                    "total_products": total_products,
+                }
+                webhook_service.publish_event("product.bulk_deleted", payload)
+        except Exception as webhook_err:
+            logger.warning(f"Failed to publish webhook event for product.bulk_deleted: {webhook_err}")
 
         # Close Redis connection
         redis_client.close()
