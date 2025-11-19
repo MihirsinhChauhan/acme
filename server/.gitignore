@@ -12,3 +12,10 @@ __pycache__/
 coverage.xml
 htmlcov/
 celerybeat-schedule
+
+/dist/
+/build/
+/*.egg-info/
+
+
+/data

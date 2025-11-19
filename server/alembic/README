@@ -1,0 +1,4 @@
+This directory contains the Alembic migration environment for the Acme CSV
+Import Platform. Use `uv run alembic revision --autogenerate -m "..."` to
+create new migrations and `uv run alembic upgrade head` to apply them.
+

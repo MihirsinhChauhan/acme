@@ -12,6 +12,9 @@ app/core/__init__.py
 app/core/config.py
 app/core/db.py
 app/models/__init__.py
+app/models/base.py
+app/models/import_job.py
+app/models/product.py
 app/schemas/__init__.py
 app/services/__init__.py
 app/tasks/__init__.py
