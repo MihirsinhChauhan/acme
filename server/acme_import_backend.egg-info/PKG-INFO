@@ -1,0 +1,41 @@
+Metadata-Version: 2.4
+Name: acme-import-backend
+Version: 0.1.0
+Summary: FastAPI + Celery service for large CSV product imports
+Author: Mihir
+License: MIT
+Requires-Python: >=3.12
+Description-Content-Type: text/markdown
+Requires-Dist: fastapi>=0.114
+Requires-Dist: uvicorn[standard]>=0.32
+Requires-Dist: sqlalchemy>=2.0
+Requires-Dist: pydantic>=2.9
+Requires-Dist: pydantic-settings>=2.4
+Requires-Dist: psycopg[binary]>=3.2
+Requires-Dist: alembic>=1.13
+Requires-Dist: celery>=5.4
+Requires-Dist: aio-pika>=9.4
+Requires-Dist: redis>=5.1
+Requires-Dist: python-multipart>=0.0.9
+Requires-Dist: httpx>=0.27
+Requires-Dist: python-dateutil>=2.9
+Provides-Extra: dev
+Requires-Dist: pytest>=8.3; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.24; extra == "dev"
+Requires-Dist: ruff>=0.6; extra == "dev"
+Requires-Dist: black>=24.8; extra == "dev"
+Requires-Dist: mypy>=1.11; extra == "dev"
+
+# Acme Import Backend
+
+FastAPI + Celery service that ingests large CSV product catalogs with real-time progress updates, product CRUD APIs, webhook management, and bulk delete workflows.
+
+## Getting Started
+
+1. Create a Python 3.12 virtual environment.
+2. Install dependencies with `poetry install` (or `pip install -e .`).
+3. Copy `.env.example` to `.env` and fill in connection strings.
+4. Start the API with `uvicorn app.main:app --reload`.
+5. Run the Celery worker with `celery -A app.tasks.celery_app.celery_app worker -l info`.
+
+Infrastructure services (Postgres, RabbitMQ, Redis) will be provided via `docker-compose` in a later step.
