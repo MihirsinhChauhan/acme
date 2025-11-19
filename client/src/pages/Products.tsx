@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -29,50 +29,194 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Search, Plus, Trash2, Edit, ChevronLeft, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-
-// Mock data
-const mockProducts = Array.from({ length: 50 }, (_, i) => ({
-  id: `${i + 1}`,
-  sku: `PROD-${String(i + 1).padStart(5, "0")}`,
-  name: `Product ${i + 1}`,
-  description: `Description for product ${i + 1}`,
-  active: Math.random() > 0.3,
-}));
+import {
+  useProducts,
+  useCreateProduct,
+  useUpdateProduct,
+  useDeleteProduct,
+  useBulkDeleteProducts,
+} from "@/hooks/useProducts";
+import { ProductDialog } from "@/components/ProductDialog";
+import type { Product } from "@/types/api";
+import { useProgress } from "@/hooks/useProgress";
+import ProgressTracker from "@/components/ProgressTracker";
 
 export default function Products() {
-  const [products] = useState(mockProducts);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const [pageSize] = useState(20);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [bulkDeleteJobId, setBulkDeleteJobId] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const filteredProducts = products.filter((product) => {
-    const matchesSearch =
-      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.description.toLowerCase().includes(searchTerm.toLowerCase());
+  // Build query parameters
+  const queryParams = useMemo(() => {
+    const params: {
+      page: number;
+      page_size: number;
+      sku?: string;
+      name?: string;
+      description?: string;
+      active?: boolean;
+    } = {
+      page: currentPage,
+      page_size: pageSize,
+    };
 
-    const matchesStatus =
-      statusFilter === "all" ||
-      (statusFilter === "active" && product.active) ||
-      (statusFilter === "inactive" && !product.active);
+    // Apply search filters
+    if (searchTerm.trim()) {
+      // For simplicity, search in name field (backend supports name, sku, description separately)
+      // You could enhance this to search in specific fields
+      params.name = searchTerm.trim();
+    }
 
-    return matchesSearch && matchesStatus;
+    // Apply status filter
+    if (statusFilter === "active") {
+      params.active = true;
+    } else if (statusFilter === "inactive") {
+      params.active = false;
+    }
+
+    return params;
+  }, [searchTerm, statusFilter, currentPage, pageSize]);
+
+  // Fetch products
+  const {
+    data: productsData,
+    isLoading,
+    error,
+    refetch,
+  } = useProducts(queryParams);
+
+  // Mutations
+  const createProduct = useCreateProduct({
+    onSuccess: () => {
+      toast({
+        title: "Product created",
+        description: "The product has been successfully created.",
+      });
+      setDialogOpen(false);
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create product.",
+        variant: "destructive",
+      });
+    },
   });
 
-  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedProducts = filteredProducts.slice(startIndex, startIndex + itemsPerPage);
+  const updateProduct = useUpdateProduct(editingProduct?.id ?? 0, {
+    onSuccess: () => {
+      toast({
+        title: "Product updated",
+        description: "The product has been successfully updated.",
+      });
+      setDialogOpen(false);
+      setEditingProduct(null);
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update product.",
+        variant: "destructive",
+      });
+    },
+  });
 
-  const handleBulkDelete = () => {
-    toast({
-      title: "Products deleted",
-      description: "All products have been successfully deleted.",
-    });
+  const deleteProduct = useDeleteProduct({
+    onSuccess: () => {
+      toast({
+        title: "Product deleted",
+        description: "The product has been successfully deleted.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete product.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const bulkDelete = useBulkDeleteProducts({
+    onSuccess: (response) => {
+      setBulkDeleteJobId(response.job_id);
+      toast({
+        title: "Bulk delete initiated",
+        description: "All products are being deleted in the background.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to initiate bulk delete.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Track bulk delete progress
+  const { progress: bulkDeleteProgress, isComplete: bulkDeleteComplete } = useProgress(
+    bulkDeleteJobId,
+    {
+      onProgress: (event) => {
+        if (event.status === "done") {
+          toast({
+            title: "Bulk delete completed",
+            description: "All products have been successfully deleted.",
+          });
+          setBulkDeleteJobId(null);
+          refetch();
+        } else if (event.status === "failed") {
+          toast({
+            title: "Bulk delete failed",
+            description: event.error_message || "Failed to delete all products.",
+            variant: "destructive",
+          });
+          setBulkDeleteJobId(null);
+        }
+      },
+    }
+  );
+
+  // Handle dialog open for create
+  const handleCreateClick = () => {
+    setEditingProduct(null);
+    setDialogOpen(true);
   };
+
+  // Handle dialog open for edit
+  const handleEditClick = (product: Product) => {
+    setEditingProduct(product);
+    setDialogOpen(true);
+  };
+
+  // Handle delete
+  const handleDeleteClick = (product: Product) => {
+    deleteProduct.mutate(product.id);
+  };
+
+  // Handle bulk delete
+  const handleBulkDelete = () => {
+    bulkDelete.mutate();
+  };
+
+  // Get current mutation (create or update)
+  const currentMutation = editingProduct ? updateProduct : createProduct;
+
+  // Calculate pagination
+  const totalPages = productsData
+    ? Math.ceil(productsData.total / productsData.page_size)
+    : 0;
+  const hasNextPage = currentPage < totalPages;
+  const hasPrevPage = currentPage > 1;
 
   return (
     <div className="space-y-6">
@@ -86,7 +230,10 @@ export default function Products() {
         <div className="flex space-x-3">
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="destructive">
+              <Button
+                variant="destructive"
+                disabled={bulkDelete.isPending || bulkDeleteJobId !== null}
+              >
                 <Trash2 className="mr-2 h-4 w-4" />
                 Delete All
               </Button>
@@ -101,16 +248,25 @@ export default function Products() {
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={handleBulkDelete}>Delete All</AlertDialogAction>
+                <AlertDialogAction onClick={handleBulkDelete}>
+                  Delete All
+                </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-          <Button>
+          <Button onClick={handleCreateClick}>
             <Plus className="mr-2 h-4 w-4" />
             Add Product
           </Button>
         </div>
       </div>
+
+      {/* Bulk delete progress tracker */}
+      {bulkDeleteJobId && (
+        <Card className="p-4">
+          <ProgressTracker jobId={bulkDeleteJobId} />
+        </Card>
+      )}
 
       <Card className="p-6">
         <div className="mb-4 flex flex-col space-y-4 sm:flex-row sm:space-x-4 sm:space-y-0">
@@ -119,7 +275,10 @@ export default function Products() {
             <Input
               placeholder="Search by SKU, name, or description..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1); // Reset to first page on search
+              }}
               className="pl-10"
             />
           </div>
@@ -147,45 +306,99 @@ export default function Products() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {paginatedProducts.map((product) => (
-                <TableRow key={product.id}>
-                  <TableCell className="font-mono text-sm">{product.sku}</TableCell>
-                  <TableCell className="font-medium">{product.name}</TableCell>
-                  <TableCell className="max-w-md truncate text-muted-foreground">
-                    {product.description}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={product.active ? "default" : "secondary"}>
-                      {product.active ? "Active" : "Inactive"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end space-x-2">
-                      <Button variant="ghost" size="sm">
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm">
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
+              {isLoading ? (
+                // Loading skeleton
+                Array.from({ length: 5 }).map((_, i) => (
+                  <TableRow key={i}>
+                    <TableCell>
+                      <Skeleton className="h-4 w-24" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-32" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-48" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-16" />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Skeleton className="h-8 w-16 ml-auto" />
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : error ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-8 text-destructive">
+                    Error loading products: {error instanceof Error ? error.message : "Unknown error"}
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : !productsData || productsData.items.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                    No products found
+                  </TableCell>
+                </TableRow>
+              ) : (
+                productsData.items.map((product) => (
+                  <TableRow key={product.id}>
+                    <TableCell className="font-mono text-sm">{product.sku}</TableCell>
+                    <TableCell className="font-medium">{product.name}</TableCell>
+                    <TableCell className="max-w-md truncate text-muted-foreground">
+                      {product.description || "—"}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={product.active ? "default" : "secondary"}>
+                        {product.active ? "Active" : "Inactive"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end space-x-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEditClick(product)}
+                          disabled={deleteProduct.isPending}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteClick(product)}
+                          disabled={deleteProduct.isPending}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </div>
 
         <div className="mt-4 flex items-center justify-between">
           <p className="text-sm text-muted-foreground">
-            Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, filteredProducts.length)} of{" "}
-            {filteredProducts.length} products
+            {isLoading ? (
+              "Loading..."
+            ) : productsData ? (
+              <>
+                Showing {(productsData.page - 1) * productsData.page_size + 1} to{" "}
+                {Math.min(productsData.page * productsData.page_size, productsData.total)} of{" "}
+                {productsData.total} products
+              </>
+            ) : (
+              "No products"
+            )}
           </p>
           <div className="flex space-x-2">
             <Button
               variant="outline"
               size="sm"
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
+              disabled={!hasPrevPage || isLoading}
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
@@ -193,13 +406,24 @@ export default function Products() {
               variant="outline"
               size="sm"
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
+              disabled={!hasNextPage || isLoading}
             >
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
         </div>
       </Card>
+
+      {/* Product create/edit dialog */}
+      <ProductDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        product={editingProduct}
+        mutation={currentMutation}
+        onSuccess={() => {
+          refetch();
+        }}
+      />
     </div>
   );
 }
