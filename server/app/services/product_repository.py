@@ -8,7 +8,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.models.product import Product
-from app.schemas.product import ProductCreate
+from app.schemas.product import ProductCreate, ProductUpdate, ProductFilter
 
 
 class ProductRepository:
@@ -133,4 +133,121 @@ class ProductRepository:
             Total product count
         """
         return self._session.query(Product).count()
+
+    def list_with_filters(
+        self, filter_params: ProductFilter, page: int = 1, page_size: int = 20
+    ) -> tuple[Sequence[Product], int]:
+        """Fetch products with filtering and pagination.
+        
+        Args:
+            filter_params: ProductFilter instance with optional filters
+            page: Page number (1-indexed)
+            page_size: Number of items per page
+            
+        Returns:
+            Tuple of (products sequence, total count)
+        """
+        query = self._session.query(Product)
+        
+        # Apply filters with ILIKE for partial matching (case-insensitive)
+        if filter_params.sku is not None:
+            query = query.filter(Product.sku.ilike(f"%{filter_params.sku}%"))
+        
+        if filter_params.name is not None:
+            query = query.filter(Product.name.ilike(f"%{filter_params.name}%"))
+        
+        if filter_params.description is not None:
+            # Handle NULL descriptions - only match non-NULL descriptions
+            query = query.filter(
+                Product.description.isnot(None),
+                Product.description.ilike(f"%{filter_params.description}%"),
+            )
+        
+        if filter_params.active is not None:
+            query = query.filter(Product.active == filter_params.active)
+        
+        # Get total count before pagination
+        total = query.count()
+        
+        # Apply pagination
+        offset = (page - 1) * page_size
+        products = (
+            query.order_by(Product.created_at.desc())
+            .limit(page_size)
+            .offset(offset)
+            .all()
+        )
+        
+        return products, total
+
+    def create(self, product: ProductCreate) -> Product:
+        """Create a new product.
+        
+        Args:
+            product: ProductCreate schema with product data
+            
+        Returns:
+            Created Product instance
+            
+        Raises:
+            IntegrityError: If SKU already exists (case-insensitive)
+        """
+        db_product = Product(
+            sku=product.sku.strip(),
+            name=product.name,
+            description=product.description,
+            active=product.active,
+        )
+        self._session.add(db_product)
+        self._session.commit()
+        self._session.refresh(db_product)
+        return db_product
+
+    def update(self, product_id: int, product: ProductUpdate) -> Product | None:
+        """Update a product by ID.
+        
+        Args:
+            product_id: Database identifier
+            product: ProductUpdate schema with fields to update
+            
+        Returns:
+            Updated Product instance if found, None otherwise
+            
+        Raises:
+            IntegrityError: If new SKU already exists (case-insensitive)
+        """
+        db_product = self.get_by_id(product_id)
+        if db_product is None:
+            return None
+        
+        # Update only provided fields
+        if product.sku is not None:
+            db_product.sku = product.sku.strip()
+        if product.name is not None:
+            db_product.name = product.name
+        if product.description is not None:
+            db_product.description = product.description
+        if product.active is not None:
+            db_product.active = product.active
+        
+        self._session.commit()
+        self._session.refresh(db_product)
+        return db_product
+
+    def delete(self, product_id: int) -> bool:
+        """Delete a product by ID.
+        
+        Args:
+            product_id: Database identifier
+            
+        Returns:
+            True if product was deleted, False if not found
+        """
+        db_product = self.get_by_id(product_id)
+        if db_product is None:
+            return False
+        
+        self._session.delete(db_product)
+        self._session.commit()
+        return True
 

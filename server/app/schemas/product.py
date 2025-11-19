@@ -54,3 +54,38 @@ class CSVProductRow(ProductBase):
         return value
 
 
+class ProductUpdate(BaseModel):
+    """Payload used when updating a product (all fields optional)."""
+
+    sku: NonEmptyStr | None = Field(default=None, description="Unique stock keeping unit identifier")
+    name: NonEmptyStr | None = Field(default=None, description="Display name for the product")
+    description: str | None = Field(default=None, description="Optional marketing copy")
+    active: bool | None = Field(default=None, description="Indicates if the product is sellable")
+
+    @field_validator("sku", "name", mode="before")
+    @classmethod
+    def strip_whitespace(cls, value: str | None) -> str | None:
+        if isinstance(value, str):
+            value = value.strip()
+        return value
+
+
+class ProductFilter(BaseModel):
+    """Query parameters for filtering products."""
+
+    sku: str | None = Field(default=None, description="Filter by SKU (partial match, case-insensitive)")
+    name: str | None = Field(default=None, description="Filter by name (partial match, case-insensitive)")
+    description: str | None = Field(default=None, description="Filter by description (partial match, case-insensitive)")
+    active: bool | None = Field(default=None, description="Filter by active status")
+
+
+class ProductListResponse(BaseModel):
+    """Paginated response wrapper for product lists."""
+
+    items: list[ProductResponse] = Field(description="List of products in this page")
+    total: int = Field(description="Total number of products matching the filters")
+    page: int = Field(description="Current page number (1-indexed)")
+    page_size: int = Field(description="Number of items per page")
+
+    model_config = ConfigDict(from_attributes=True)
+
