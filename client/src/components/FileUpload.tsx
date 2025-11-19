@@ -2,8 +2,9 @@ import { useCallback, useState } from "react";
 import { Upload, FileSpreadsheet, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
+import { useUpload } from "@/hooks/useUpload";
+import { ApiError } from "@/lib/api/client";
 
 interface FileUploadProps {
   onUploadComplete?: (jobId: string) => void;
@@ -12,9 +13,43 @@ interface FileUploadProps {
 export default function FileUpload({ onUploadComplete }: FileUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [progress, setProgress] = useState(0);
   const { toast } = useToast();
+
+  const upload = useUpload({
+    onSuccess: (response) => {
+      toast({
+        title: "Upload successful",
+        description: `${selectedFile?.name} has been uploaded and is being processed.`,
+      });
+      setSelectedFile(null);
+      onUploadComplete?.(response.job_id);
+    },
+    onError: (error) => {
+      let errorMessage = "There was an error uploading your file. Please try again.";
+      
+      if (error instanceof ApiError) {
+        // Handle API errors with detailed messages
+        if (typeof error.data === "object" && error.data !== null) {
+          const data = error.data as { detail?: string | { message?: string; errors?: unknown } };
+          if (typeof data.detail === "string") {
+            errorMessage = data.detail;
+          } else if (data.detail && typeof data.detail === "object" && "message" in data.detail) {
+            errorMessage = String(data.detail.message) || errorMessage;
+          }
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
+      toast({
+        title: "Upload failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    },
+  });
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -49,53 +84,23 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files[0]) {
-      setSelectedFile(files[0]);
+      const file = files[0];
+      if (file.type === "text/csv" || file.name.endsWith(".csv")) {
+        setSelectedFile(file);
+      } else {
+        toast({
+          title: "Invalid file type",
+          description: "Please upload a CSV file",
+          variant: "destructive",
+        });
+      }
     }
-  }, []);
+  }, [toast]);
 
-  const handleUpload = async () => {
+  const handleUpload = useCallback(() => {
     if (!selectedFile) return;
-
-    setIsUploading(true);
-    setProgress(0);
-
-    // Simulate upload progress
-    const interval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 90) {
-          clearInterval(interval);
-          return prev;
-        }
-        return prev + 10;
-      });
-    }, 200);
-
-    try {
-      // TODO: Implement actual API call
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      setProgress(100);
-      
-      toast({
-        title: "Upload successful",
-        description: `${selectedFile.name} has been uploaded and is being processed.`,
-      });
-
-      setTimeout(() => {
-        setIsUploading(false);
-        setSelectedFile(null);
-        setProgress(0);
-        onUploadComplete?.("sample-job-id");
-      }, 500);
-    } catch (error) {
-      toast({
-        title: "Upload failed",
-        description: "There was an error uploading your file. Please try again.",
-        variant: "destructive",
-      });
-      setIsUploading(false);
-      setProgress(0);
-    }
-  };
+    upload.mutate(selectedFile);
+  }, [selectedFile, upload]);
 
   return (
     <Card className="p-6">
@@ -122,7 +127,7 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
                   className="sr-only"
                   accept=".csv"
                   onChange={handleFileSelect}
-                  disabled={isUploading}
+                  disabled={upload.isPending}
                 />
               </label>
             </p>
@@ -147,30 +152,20 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
               variant="ghost"
               size="sm"
               onClick={() => setSelectedFile(null)}
-              disabled={isUploading}
+              disabled={upload.isPending}
             >
               <X className="h-4 w-4" />
             </Button>
           </div>
         )}
 
-        {isUploading && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Uploading...</span>
-              <span className="font-medium text-foreground">{progress}%</span>
-            </div>
-            <Progress value={progress} className="h-2" />
-          </div>
-        )}
-
         <Button
           onClick={handleUpload}
-          disabled={!selectedFile || isUploading}
+          disabled={!selectedFile || upload.isPending}
           className="w-full"
           size="lg"
         >
-          {isUploading ? "Uploading..." : "Upload and Import"}
+          {upload.isPending ? "Uploading..." : "Upload and Import"}
         </Button>
       </div>
     </Card>

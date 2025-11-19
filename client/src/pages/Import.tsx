@@ -6,27 +6,9 @@ import { Info } from "lucide-react";
 
 export default function Import() {
   const [jobId, setJobId] = useState<string | null>(null);
-  const [status, setStatus] = useState<"idle" | "importing" | "completed" | "failed">("idle");
-  const [processedRows, setProcessedRows] = useState(0);
-  const [totalRows, setTotalRows] = useState(0);
 
   const handleUploadComplete = (newJobId: string) => {
     setJobId(newJobId);
-    setStatus("importing");
-    setTotalRows(100000);
-    setProcessedRows(0);
-
-    // Simulate progress
-    const interval = setInterval(() => {
-      setProcessedRows((prev) => {
-        if (prev >= 100000) {
-          clearInterval(interval);
-          setStatus("completed");
-          return 100000;
-        }
-        return prev + 5000;
-      });
-    }, 300);
   };
 
   return (
@@ -56,13 +38,7 @@ export default function Import() {
 
       <FileUpload onUploadComplete={handleUploadComplete} />
 
-      <ProgressTracker
-        jobId={jobId}
-        status={status}
-        processedRows={processedRows}
-        totalRows={totalRows}
-        stage={status === "importing" ? `batch_${Math.floor(processedRows / 10000)}` : undefined}
-      />
+      <ProgressTracker jobId={jobId} />
     </div>
   );
 }
