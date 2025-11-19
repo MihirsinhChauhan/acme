@@ -2,7 +2,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import health, progress, upload
+from app.api import health, products, progress, upload
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -25,3 +25,4 @@ app.add_middleware(
 app.include_router(health.router)  # Health checks at root level
 app.include_router(upload.router, prefix=settings.api_prefix)
 app.include_router(progress.router, prefix=settings.api_prefix)
+app.include_router(products.router, prefix=settings.api_prefix)

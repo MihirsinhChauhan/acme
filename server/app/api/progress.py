@@ -125,7 +125,7 @@ async def stream_progress(
             # Track terminal status to know when to close stream
             is_terminal = False
             last_poll_time = asyncio.get_event_loop().time()
-            poll_interval = 2.5  # seconds
+            poll_interval = 0.5  # seconds
 
             # Stream updates until job completes
             while not is_terminal:
@@ -133,7 +133,7 @@ async def stream_progress(
                     # Wait for pub/sub message with timeout (non-blocking)
                     message = await asyncio.wait_for(
                         pubsub.get_message(ignore_subscribe_messages=True),
-                        timeout=1.0,
+                        timeout=0.5,
                     )
 
                     if message and message["type"] == "message":

@@ -7,7 +7,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.models.import_job import ImportJob, ImportStatus
+from app.models.import_job import ImportJob, ImportStatus, JobType
 from app.schemas.import_job import ImportJobCreate, ImportJobResponse
 
 
@@ -33,6 +33,7 @@ class ImportRepository:
         """
         job = ImportJob(
             filename=job_data.filename,
+            job_type=job_data.job_type,
             total_rows=job_data.total_rows,
             status=ImportStatus.QUEUED,
             processed_rows=0,
@@ -213,4 +214,47 @@ class ImportService:
         """
         jobs = self._repository.get_recent(limit=limit)
         return [ImportJobResponse.model_validate(job) for job in jobs]
+
+    def create_delete_job(self) -> ImportJobResponse:
+        """Create a new bulk delete job record in the database.
+        
+        This is called before enqueueing the bulk delete background task.
+        
+        Returns:
+            ImportJobResponse schema with the created job details
+        """
+        job_data = ImportJobCreate(
+            filename="bulk_delete_all_products",
+            job_type=JobType.BULK_DELETE,
+            total_rows=None,  # Will be determined during task execution
+        )
+        job = self._repository.create(job_data)
+        return ImportJobResponse.model_validate(job)
+
+    def enqueue_delete_task(self, job_id: UUID) -> str:
+        """Publish a Celery task to RabbitMQ for async bulk deletion.
+        
+        This delegates the heavy lifting to a Celery worker, allowing the API
+        to return immediately.
+        
+        Args:
+            job_id: Delete job UUID to process
+            
+        Returns:
+            Celery task ID for tracking/debugging
+            
+        Raises:
+            ImportError: If Celery tasks are not properly configured
+        """
+        # Lazy import to avoid circular dependencies and allow testing without full setup
+        from app.tasks.bulk_delete_tasks import bulk_delete_all_products_task
+
+        # Send task to RabbitMQ via Celery
+        # The worker will receive it and begin processing
+        task = bulk_delete_all_products_task.apply_async(
+            args=[str(job_id)],
+            task_id=str(job_id),  # Use job_id as task_id for easier correlation
+        )
+
+        return task.id
 

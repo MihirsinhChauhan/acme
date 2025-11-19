@@ -6,13 +6,17 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models.import_job import ImportStatus
+from app.models.import_job import ImportStatus, JobType
 
 
 class ImportJobCreate(BaseModel):
     """Payload used when creating a new import job record."""
 
     filename: str = Field(description="Original filename supplied during upload")
+    job_type: JobType = Field(
+        default=JobType.IMPORT,
+        description="Type of job (import or bulk_delete)",
+    )
     total_rows: int | None = Field(
         default=None,
         ge=0,
@@ -34,6 +38,7 @@ class ImportJobResponse(BaseModel):
 
     id: UUID
     filename: str
+    job_type: JobType
     status: ImportStatus
     total_rows: int | None = Field(default=None, ge=0)
     processed_rows: int = Field(ge=0)

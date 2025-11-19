@@ -282,6 +282,7 @@ def process_csv_import(self, job_id: str, file_path: str) -> dict:
                         status="importing",
                         processed_rows=processed_rows,
                         stage=f"batch_{batch_num}",
+                        force=True,
                     )
                     
                     logger.info(
@@ -310,6 +311,7 @@ def process_csv_import(self, job_id: str, file_path: str) -> dict:
                     status="importing",
                     processed_rows=processed_rows,
                     stage=f"batch_{batch_num}_final",
+                    force=True,
                 )
                 
                 logger.info(

@@ -23,6 +23,13 @@ class ImportStatus(str, Enum):
     FAILED = "failed"
 
 
+class JobType(str, Enum):
+    """Enumerates the types of jobs that can be tracked."""
+
+    IMPORT = "import"
+    BULK_DELETE = "bulk_delete"
+
+
 class ImportJob(Base):
     """Tracks metadata and progress for a CSV import request."""
 
@@ -34,6 +41,12 @@ class ImportJob(Base):
         default=uuid4,
     )
     filename: Mapped[str] = mapped_column(Text, nullable=False)
+    job_type: Mapped[JobType] = mapped_column(
+        PgEnum(JobType, name="job_type", values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
+        default=JobType.IMPORT,
+        server_default=JobType.IMPORT.value,
+    )
     status: Mapped[ImportStatus] = mapped_column(
         PgEnum(ImportStatus, name="import_job_status", values_callable=lambda x: [e.value for e in x]),
         nullable=False,
