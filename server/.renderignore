@@ -1,0 +1,25 @@
+# Files to ignore when deploying to Render
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.env
+.env.local
+*.log
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+dump/
+data/
+*.md
+!README.md
+

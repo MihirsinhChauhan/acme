@@ -1,0 +1,86 @@
+services:
+  # FastAPI Web Service
+  - type: web
+    name: acme-api
+    env: python
+    region: oregon
+    plan: starter
+    buildCommand: pip install --upgrade pip && pip install -e .
+    startCommand: python scripts/render-startup.py && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: API_PREFIX
+        value: /api
+      - key: UPLOAD_TMP_DIR
+        value: /tmp/imports
+      - key: MAX_UPLOAD_SIZE_MB
+        value: 512
+      - key: DATABASE_URL
+        fromDatabase:
+          name: acme-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: acme-redis
+          type: redis
+          property: connectionString
+      - key: CELERY_BROKER_URL
+        fromService:
+          name: acme-redis
+          type: redis
+          property: connectionString
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          name: acme-redis
+          type: redis
+          property: connectionString
+
+  # Celery Background Worker
+  - type: worker
+    name: acme-worker
+    env: python
+    region: oregon
+    plan: starter
+    buildCommand: pip install --upgrade pip && pip install -e .
+    startCommand: python scripts/render-startup.py && celery -A app.tasks.celery_app.celery_app worker --loglevel=info --concurrency=4 --max-tasks-per-child=1000 -Q import_queue,bulk_ops_queue,default
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: acme-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: acme-redis
+          type: redis
+          property: connectionString
+      - key: CELERY_BROKER_URL
+        fromService:
+          name: acme-redis
+          type: redis
+          property: connectionString
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          name: acme-redis
+          type: redis
+          property: connectionString
+      - key: CELERY_WORKER_CONCURRENCY
+        value: "4"
+      - key: CELERY_WORKER_PREFETCH_MULTIPLIER
+        value: "1"
+
+databases:
+  # PostgreSQL Database
+  - name: acme-db
+    databaseName: acme
+    user: acme_user
+    plan: starter
+
+redis:
+  # Redis instance for caching and Celery broker
+  - name: acme-redis
+    plan: starter
+    maxmemoryPolicy: allkeys-lru
+
