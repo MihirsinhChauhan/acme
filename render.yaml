@@ -2,6 +2,7 @@ services:
   # FastAPI Web Service
   - type: web
     name: acme-api
+    rootDir: server
     env: python
     region: oregon
     plan: starter
@@ -39,6 +40,7 @@ services:
   # Celery Background Worker
   - type: worker
     name: acme-worker
+    rootDir: server
     env: python
     region: oregon
     plan: starter
