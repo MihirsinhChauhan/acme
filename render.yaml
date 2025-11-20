@@ -24,17 +24,17 @@ services:
       - key: REDIS_URL
         fromService:
           name: acme-redis
-          type: redis
+          type: keyvalue
           property: connectionString
       - key: CELERY_BROKER_URL
         fromService:
           name: acme-redis
-          type: redis
+          type: keyvalue
           property: connectionString
       - key: CELERY_RESULT_BACKEND
         fromService:
           name: acme-redis
-          type: redis
+          type: keyvalue
           property: connectionString
 
   # Celery Background Worker
@@ -56,22 +56,28 @@ services:
       - key: REDIS_URL
         fromService:
           name: acme-redis
-          type: redis
+          type: keyvalue
           property: connectionString
       - key: CELERY_BROKER_URL
         fromService:
           name: acme-redis
-          type: redis
+          type: keyvalue
           property: connectionString
       - key: CELERY_RESULT_BACKEND
         fromService:
           name: acme-redis
-          type: redis
+          type: keyvalue
           property: connectionString
       - key: CELERY_WORKER_CONCURRENCY
         value: "4"
       - key: CELERY_WORKER_PREFETCH_MULTIPLIER
         value: "1"
+
+  # Redis instance for caching and Celery broker
+  - type: keyvalue
+    name: acme-redis
+    plan: starter
+    maxmemoryPolicy: allkeys-lru
 
 databases:
   # PostgreSQL Database
@@ -79,10 +85,4 @@ databases:
     databaseName: acme
     user: acme_user
     plan: starter
-
-redis:
-  # Redis instance for caching and Celery broker
-  - name: acme-redis
-    plan: starter
-    maxmemoryPolicy: allkeys-lru
 
