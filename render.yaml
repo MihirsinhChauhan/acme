@@ -78,6 +78,10 @@ services:
     name: acme-redis
     plan: starter
     maxmemoryPolicy: allkeys-lru
+    # Allow all IPs for now; tighten this in production if needed
+    ipAllowList:
+      - source: 0.0.0.0/0
+        description: allow all (development)
 
 databases:
   # PostgreSQL Database
