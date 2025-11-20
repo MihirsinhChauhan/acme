@@ -13,42 +13,49 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Create webhooks table
-    op.create_table(
-        "webhooks",
-        sa.Column("id", sa.Integer(), nullable=False, autoincrement=True),
-        sa.Column("url", sa.Text(), nullable=False),
-        sa.Column("events", postgresql.JSON(astext_type=sa.Text()), nullable=False),
-        sa.Column("enabled", sa.Boolean(), nullable=False, server_default="true"),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.PrimaryKeyConstraint("id", name="pk_webhooks"),
+    # Create webhooks table if it doesn't exist
+    op.execute(
+        """
+        CREATE TABLE IF NOT EXISTS webhooks (
+            id SERIAL PRIMARY KEY,
+            url TEXT NOT NULL,
+            events JSON NOT NULL,
+            enabled BOOLEAN NOT NULL DEFAULT true,
+            created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+            updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+        );
+        """
     )
 
-    # Create webhook_deliveries table
-    op.create_table(
-        "webhook_deliveries",
-        sa.Column("id", sa.Integer(), nullable=False, autoincrement=True),
-        sa.Column("webhook_id", sa.Integer(), nullable=False),
-        sa.Column("event_type", sa.Text(), nullable=False),
-        sa.Column("payload", postgresql.JSON(astext_type=sa.Text()), nullable=False),
-        sa.Column("status", sa.Text(), nullable=False, server_default="pending"),
-        sa.Column("response_code", sa.Integer(), nullable=True),
-        sa.Column("response_body", sa.Text(), nullable=True),
-        sa.Column("response_time_ms", sa.Integer(), nullable=True),
-        sa.Column("attempted_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.PrimaryKeyConstraint("id", name="pk_webhook_deliveries"),
-        sa.ForeignKeyConstraint(
-            ["webhook_id"],
-            ["webhooks.id"],
-            name="fk_webhook_deliveries_webhook_id_webhooks",
-            ondelete="CASCADE",
-        ),
+    # Create webhook_deliveries table if it doesn't exist
+    op.execute(
+        """
+        CREATE TABLE IF NOT EXISTS webhook_deliveries (
+            id SERIAL PRIMARY KEY,
+            webhook_id INTEGER NOT NULL,
+            event_type TEXT NOT NULL,
+            payload JSON NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            response_code INTEGER,
+            response_body TEXT,
+            response_time_ms INTEGER,
+            attempted_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+            completed_at TIMESTAMP WITH TIME ZONE,
+            CONSTRAINT fk_webhook_deliveries_webhook_id_webhooks 
+                FOREIGN KEY (webhook_id) 
+                REFERENCES webhooks(id) 
+                ON DELETE CASCADE
+        );
+        """
     )
 
-    # Create index on webhook_id for faster lookups
-    op.create_index("ix_webhook_deliveries_webhook_id", "webhook_deliveries", ["webhook_id"])
+    # Create index if it doesn't exist
+    op.execute(
+        """
+        CREATE INDEX IF NOT EXISTS ix_webhook_deliveries_webhook_id 
+        ON webhook_deliveries (webhook_id);
+        """
+    )
 
 
 def downgrade() -> None:

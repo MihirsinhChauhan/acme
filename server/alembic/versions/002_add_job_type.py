@@ -25,21 +25,20 @@ def upgrade() -> None:
         """
     )
 
-    # Add job_type column with default value 'import' for existing rows
-    job_type_enum = postgresql.ENUM(
-        "import",
-        "bulk_delete",
-        name="job_type",
-        create_type=False,
-    )
-    op.add_column(
-        "import_jobs",
-        sa.Column(
-            "job_type",
-            job_type_enum,
-            nullable=False,
-            server_default="import",
-        ),
+    # Add job_type column if it doesn't exist
+    op.execute(
+        """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_name = 'import_jobs' AND column_name = 'job_type'
+            ) THEN
+                ALTER TABLE import_jobs 
+                ADD COLUMN job_type job_type NOT NULL DEFAULT 'import';
+            END IF;
+        END$$;
+        """
     )
 
 

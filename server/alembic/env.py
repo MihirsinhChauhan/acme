@@ -44,6 +44,12 @@ def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
     configuration = config.get_section(config.config_ini_section, {})
     configuration["sqlalchemy.url"] = settings.database_url
+    
+    # Add connection and statement timeouts to prevent hanging
+    configuration["connect_args"] = {
+        "connect_timeout": 30,
+        "options": "-c statement_timeout=600000"  # 10 minutes
+    }
 
     connectable = engine_from_config(
         configuration,

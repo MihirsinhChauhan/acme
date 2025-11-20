@@ -13,6 +13,7 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Create ENUM type if it doesn't exist
     op.execute(
         """
         DO $$
@@ -34,31 +35,45 @@ def upgrade() -> None:
         name="import_job_status",
         create_type=False,
     )
-    op.create_table(
-        "import_jobs",
-        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("filename", sa.Text(), nullable=False),
-        sa.Column("status", import_job_status, nullable=False, server_default="queued"),
-        sa.Column("total_rows", sa.Integer(), nullable=True),
-        sa.Column("processed_rows", sa.Integer(), nullable=False, server_default="0"),
-        sa.Column("error_message", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.PrimaryKeyConstraint("id", name="pk_import_jobs"),
+    
+    # Create import_jobs table if it doesn't exist
+    op.execute(
+        """
+        CREATE TABLE IF NOT EXISTS import_jobs (
+            id UUID PRIMARY KEY,
+            filename TEXT NOT NULL,
+            status import_job_status NOT NULL DEFAULT 'queued',
+            total_rows INTEGER,
+            processed_rows INTEGER NOT NULL DEFAULT 0,
+            error_message TEXT,
+            created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+            updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+        );
+        """
     )
 
-    op.create_table(
-        "products",
-        sa.Column("id", sa.BigInteger(), autoincrement=True, nullable=False),
-        sa.Column("sku", sa.Text(), nullable=False),
-        sa.Column("name", sa.Text(), nullable=False),
-        sa.Column("description", sa.Text(), nullable=True),
-        sa.Column("active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.PrimaryKeyConstraint("id", name="pk_products"),
+    # Create products table if it doesn't exist
+    op.execute(
+        """
+        CREATE TABLE IF NOT EXISTS products (
+            id BIGSERIAL PRIMARY KEY,
+            sku TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT,
+            active BOOLEAN NOT NULL DEFAULT true,
+            created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+            updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+        );
+        """
     )
-    op.create_index("uq_products_sku_lower", "products", [sa.text("lower(sku)")], unique=True)
+    
+    # Create index if it doesn't exist
+    op.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_products_sku_lower 
+        ON products (lower(sku));
+        """
+    )
 
 
 def downgrade() -> None:

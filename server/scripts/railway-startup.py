@@ -7,6 +7,7 @@ specific logs for observability.
 """
 
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -41,6 +42,12 @@ def main() -> int:
         logger.error("Migrations failed. Exiting.")
         return 1
 
+    # Log Railway environment info
+    port = os.getenv("PORT", "8000")
+    logger.info("")
+    logger.info("Railway Environment:")
+    logger.info("  PORT: %s", port)
+    logger.info("  PYTHON_VERSION: %s", sys.version.split()[0])
     logger.info("=" * 60)
     logger.info("✓ Startup completed successfully")
     logger.info("=" * 60)

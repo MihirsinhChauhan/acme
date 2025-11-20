@@ -83,9 +83,43 @@ def run_migrations() -> bool:
         settings = get_settings()
         alembic_cfg.set_main_option("sqlalchemy.url", settings.database_url)
         
-        logger.info("Running Alembic migrations...")
+        logger.info("Running Alembic migrations to 'head'...")
+        logger.info("  Config: %s", alembic_ini_path)
+        
+        # Check current database revision before migrating
+        try:
+            engine = create_engine(settings.database_url, pool_pre_ping=True)
+            with engine.connect() as conn:
+                # Check if alembic_version table exists
+                result = conn.execute(text(
+                    "SELECT EXISTS (SELECT FROM information_schema.tables "
+                    "WHERE table_schema = 'public' AND table_name = 'alembic_version')"
+                ))
+                table_exists = result.scalar()
+                
+                if table_exists:
+                    result = conn.execute(text("SELECT version_num FROM alembic_version"))
+                    current_rev = result.scalar()
+                    logger.info("  Current database revision: %s", current_rev)
+                else:
+                    logger.info("  Database not yet migrated (alembic_version table missing)")
+            
+            engine.dispose()
+        except Exception as e:
+            logger.warning(f"  Could not check current revision: {e}")
+        
+        # List available migrations
+        try:
+            from alembic.script import ScriptDirectory
+            script = ScriptDirectory.from_config(alembic_cfg)
+            logger.info("  Available migrations:")
+            for rev in script.walk_revisions():
+                logger.info("    - %s: %s", rev.revision, rev.doc)
+        except Exception as e:
+            logger.warning(f"  Could not list migrations: {e}")
         
         # Run migrations to head (latest version)
+        logger.info("  Executing upgrade command...")
         command.upgrade(alembic_cfg, "head")
         
         logger.info("✓ Migrations completed successfully")
