@@ -38,3 +38,10 @@ Quick start:
 4. Deploy!
 
 The deployment uses Redis as the Celery broker (since Render doesn't offer managed RabbitMQ).
+
+### Railway Deployment
+
+To deploy on Railway, follow [RAILWAY_DEPLOYMENT.md](./docs/RAILWAY_DEPLOYMENT.md).
+It covers provisioning managed Postgres + Redis, configuring two services
+(API + worker) from this repo, and the exact build/start commands Railway
+should run.
